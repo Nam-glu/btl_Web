@@ -20,17 +20,6 @@ const authModal = document.getElementById('authModal');
 // 2. LOGIC HEADER & SEARCH
 // ==========================================
 
-// Ẩn/Hiện Header khi cuộn
-let lastScrollTop = 0;
-window.addEventListener('scroll', function() {
-    let scrollTop = window.pageYOffset || document.documentElement.scrollTop;
-    if (scrollTop > lastScrollTop && scrollTop > 100) {
-        header.classList.add('hide');
-    } else {
-        header.classList.remove('hide');
-    }
-    lastScrollTop = scrollTop <= 0 ? 0 : scrollTop;
-}, false);
 
 // Xử lý Search Container
 searchContainer.addEventListener('click', (e) => {
@@ -48,6 +37,18 @@ searchContainer.addEventListener('click', (e) => {
 // 3. LOGIC USER POPUP & MENU
 // ==========================================
 
+window.handleLogout = function() {
+    localStorage.removeItem('currentUser'); // Xóa trước
+    isLoggedIn = false;
+    userData = null;
+    alert("Đã đăng xuất!");
+    window.location.replace("index.html"); // Dùng replace để ép trình duyệt xóa sạch trạng thái cũ
+}
+
+
+
+
+
 function renderMenu() {
     let menuHtml = "";
     if (!isLoggedIn) {
@@ -60,13 +61,31 @@ function renderMenu() {
     } else {
         menuHtml = `
             <li class="user-name-display"><i class="ti-user"></i> Chào, ${userData.username}</li>
+            <li class="user-balance"><i class="ti-wallet"></i> Số dư: ${userData.balance.toLocaleString()}đ</li>
             <li><i class="ti-heart"></i> Truyện theo dõi</li>
-            <li><i class="ti-time"></i> Lịch sử đọc</li>
             <li><i class="ti-wallet"></i> Nạp tiền</li>
+            <li onclick="showTransactionHistory()"><i class="ti-exchange-vertical"></i> Lịch sử giao dịch</li>
             <li onclick="handleLogout()"><i class="ti-export"></i> Đăng xuất</li>
         `;
     }
     userMenuList.innerHTML = menuHtml;
+}
+// Kiểm tra xem có user nào đang lưu trong máy không
+// Kiểm tra dữ liệu khi vừa mở trang hoặc F5
+const savedUser = localStorage.getItem('currentUser');
+
+if (savedUser) {
+    try {
+        userData = JSON.parse(savedUser);
+        isLoggedIn = true;
+        // Đợi DOM tải xong mới render menu
+        document.addEventListener('DOMContentLoaded', () => {
+            renderMenu();
+        });
+    } catch (e) {
+        // Nếu dữ liệu bị lỗi thì xóa luôn
+        localStorage.removeItem('currentUser');
+    }
 }
 
 userBtn.addEventListener('click', (e) => {
@@ -137,14 +156,19 @@ document.getElementById('btnSubmitAuth').addEventListener('click', async () => {
 
     try {
         if (isRegisterMode === true) {
-            // XỬ LÝ ĐĂNG KÝ
+            // --- XỬ LÝ ĐĂNG KÝ ---
             const resCheck = await fetch(API_URL + "?username=" + username);
             const listUsers = await resCheck.json();
 
             if (listUsers.length > 0) {
                 alert("Tên tài khoản đã tồn tại!");
             } else {
-                const newUser = { username, password, level: 1, history: [] };
+                const newUser = { 
+                    username,
+                    password, 
+                    level: 1, 
+                    balance: 0,
+                    history: [] };
                 const resSave = await fetch(API_URL, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -157,22 +181,32 @@ document.getElementById('btnSubmitAuth').addEventListener('click', async () => {
                 }
             }
         } else {
-            // XỬ LÝ ĐĂNG NHẬP
-            const resLogin = await fetch(API_URL + "?username=" + username + "&password=" + password);
-            const userResult = await resLogin.json();
+            // --- XỬ LÝ ĐĂNG NHẬP ---
+            const response = await fetch(API_URL);
+            const allUsers = await response.json();
 
-            if (userResult.length > 0) {
+            // Tìm user trong danh sách trả về
+            const foundUser = allUsers.find(u => 
+                u.username === username && u.password === password
+            );
+
+            if (foundUser) {
                 alert("Đăng nhập thành công!");
                 isLoggedIn = true;
-                userData = userResult[0];
-                renderMenu();
-                closeAuthModal();
+                userData = foundUser; 
+
+                renderMenu();       
+                closeAuthModal();   
+                
+                localStorage.setItem('currentUser', JSON.stringify(userData));
+                console.log("Đã đăng nhập thành công:", userData);
             } else {
                 alert("Sai tài khoản hoặc mật khẩu!");
             }
         }
-    } catch (err) {
-        alert("Lỗi kết nối Server! Kiểm tra json-server.");
+    } catch (error) {
+        console.error("Lỗi hệ thống:", error);
+        alert("Lỗi kết nối Server! Bạn đã bật json-server chưa?");
     }
 });
 
